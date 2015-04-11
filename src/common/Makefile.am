@@ -68,7 +68,8 @@ libcommon_internal_la_SOURCES = \
 	common/Readahead.cc \
 	common/Cycles.cc \
 	common/ContextCompletion.cc \
-	common/TracepointProvider.cc
+	common/TracepointProvider.cc \
+	common/PluginRegistry.cc
 
 if ENABLE_SERVER
 libcommon_internal_la_SOURCES += \
@@ -150,11 +151,10 @@ noinst_HEADERS += \
 LIBCOMMON_DEPS += \
 	$(LIBERASURE_CODE) \
 	$(LIBMSG) $(LIBAUTH) \
-	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
-	$(BOOST_RANDOM_LIBS)
+	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH)
 
 if LINUX
-LIBCOMMON_DEPS += -lrt -lblkid
+LIBCOMMON_DEPS += -lrt
 endif # LINUX
 
 libcommon_la_SOURCES = common/buffer.cc
@@ -254,7 +254,8 @@ noinst_HEADERS += \
 	common/bit_vector.hpp \
 	common/SubProcess.h \
 	common/valgrind.h \
-	common/TracepointProvider.h
+	common/TracepointProvider.h \
+	common/PluginRegistry.h
 
 if ENABLE_XIO
 noinst_HEADERS += \
