@@ -1124,6 +1124,9 @@ void ECBackend::handle_sub_read_reply(
     complete_read_op(rop, m);
   } else {
     dout(10) << __func__ << " readop not complete: " << rop << dendl;
+  } else {
+    dout(10) << __func__ << " readop complete: " << rop << dendl;
+    complete_read_op(rop, m);
   }
 }
 
@@ -1872,7 +1875,8 @@ struct CallClientContexts :
       if (r < 0) {
         res.r = r;
         goto out;
-      }      dout(10) << "!!!!! dec" << cs_bl.c_str() << dendl;
+      }
+      dout(10) << "!!!!! dec" << cs_bl.c_str() << dendl;
       ECUtil::decompress(
   ec->cs_impl,
   cs_bl,
