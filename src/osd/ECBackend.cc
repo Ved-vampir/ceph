@@ -1876,11 +1876,26 @@ struct CallClientContexts :
         res.r = r;
         goto out;
       }
-      dout(10) << "!!!!! dec" << cs_bl.c_str() << dendl;
-      ECUtil::decompress(
-  ec->cs_impl,
-  cs_bl,
-  &bl);
+      std::string cinfo("None");
+      if( res.attrs )
+      {
+          std::map<string, bufferlist>::iterator it = res.attrs->find(ECUtil::get_cinfo_key());
+                 if( it != res.attrs->end())
+          {
+        bufferlist::iterator bp = it->second.begin();
+        ::decode(cinfo, bp);
+          }
+      }
+      if (cinfo != "None") {
+        int del_pos = cinfo.rfind("/");
+        std::string origlen = cinfo.substr(del_pos + 1, cinfo.size() - del_pos - 1);
+        dout(10) << "!!!!! dec" << cs_bl.c_str() << " cinfo " << cinfo << dendl;
+        ECUtil::decompress(
+    ec->cs_impl,
+    std::stoi(origlen),
+    cs_bl,
+    &bl);
+      }
       assert(i->second.second);
       assert(i->second.first);
       i->second.first->substr_of(
