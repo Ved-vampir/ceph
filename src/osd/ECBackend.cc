@@ -201,6 +201,7 @@ struct OnRecoveryReadComplete :
     : pg(pg), hoid(hoid) {}
   void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) {
     ECBackend::read_result_t &res = in.second;
+    // FIXME???
     assert(res.r == 0);
     assert(res.errors.empty());
     assert(res.returned.size() == 1);
@@ -484,7 +485,8 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
   start_read_op(
     priority,
     m.reads,
-    OpRequestRef());
+    OpRequestRef(),
+    false, true);
 }
 
 void ECBackend::continue_recovery_op(
@@ -502,7 +504,7 @@ void ECBackend::continue_recovery_op(
       set<pg_shard_t> to_read;
       uint64_t recovery_max_chunk = get_recovery_chunk_size();
       int r = get_min_avail_to_read_shards(
-	op.hoid, want, true, &to_read);
+	op.hoid, want, true, false, &to_read);
       if (r != 0) {
 	// we must have lost a recovery source
 	assert(!op.recovery_progress.first);
@@ -1123,9 +1125,6 @@ void ECBackend::handle_sub_read_reply(
     complete_read_op(rop, m);
   } else {
     dout(10) << __func__ << " readop not complete: " << rop << dendl;
-  } else {
-    dout(10) << __func__ << " readop complete: " << rop << dendl;
-    complete_read_op(rop, m);
   }
 }
 
