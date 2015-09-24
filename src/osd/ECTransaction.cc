@@ -139,10 +139,12 @@ struct TransGenerator : public boost::static_visitor<void> {
     uint64_t offset = op.off;
     bufferlist bl_cs(op.bl), bl;
     assert(bl_cs.length());
-    dout(10) << "!!!!" << bl_cs.c_str() << dendl;
-    int r0 = ECUtil::compress(csimpl, bl_cs, &bl);
-    assert(r0 == 0);
-    dout(10) << "!!!!" << bl.c_str() << dendl;
+    if (csimpl != NULL) {
+      dout(10) << "!!!!" << bl_cs.c_str() << dendl;
+      int r0 = ECUtil::compress(csimpl, bl_cs, &bl);
+      assert(r0 == 0);
+      dout(10) << "!!!!" << bl.c_str() << dendl;
+    } else bl = bl_cs;
     assert(offset % sinfo.get_stripe_width() == 0);
     map<int, bufferlist> buffers;
 
@@ -167,12 +169,14 @@ struct TransGenerator : public boost::static_visitor<void> {
       *hinfo,
       attrset[ECUtil::get_hinfo_key()]);
 //      hbuf);
-    std::string pname = csimpl->get_profile().at("plugin");
-    std::string origlen = std::to_string(bl_cs.length());
-    std::string cinfo = pname + "/" + origlen;
-    ::encode(
-      cinfo, 
-      attrset[ECUtil::get_cinfo_key()]);
+    if (csimpl != NULL) {
+      std::string pname = csimpl->get_profile().at("plugin");
+      std::string origlen = std::to_string(bl_cs.length());
+      std::string cinfo = pname + "/" + origlen;
+      ::encode(
+        cinfo, 
+        attrset[ECUtil::get_cinfo_key()]);
+    }
 
     assert(r == 0);
     for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();

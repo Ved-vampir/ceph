@@ -297,15 +297,17 @@ PGBackend *PGBackend::build_pg_backend(
     assert(ec_impl);
     // Compression* cs = (Compression*)(new CompressionFake());
     CompressionInterfaceRef cs_impl;// = CompressionInterfaceRef(cs);
-    CompressionProfile cp;
-    cp["plugin"] = "zlib";
-    ceph::CompressionPluginRegistry::instance().factory(
-      cp.find("plugin")->second,
-      g_conf->erasure_code_dir,
-      cp,
-      &cs_impl,
-      &ss);
-    dout(10) << "!!!PGBackend::build_pg_backend" << ss.str() << dendl;
+    if (profile.find("compression") != profile.end()) {
+      CompressionProfile cp;
+      cp["plugin"] = "zlib";
+      ceph::CompressionPluginRegistry::instance().factory(
+        cp.find("plugin")->second,
+        g_conf->erasure_code_dir,
+        cp,
+        &cs_impl,
+        &ss);
+      dout(10) << "!!!PGBackend::build_pg_backend" << ss.str() << dendl;
+    } else cs_impl = NULL;
     return new ECBackend(
       l,
       coll,
