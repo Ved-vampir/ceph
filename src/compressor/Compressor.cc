@@ -18,8 +18,13 @@
 
 Compressor* Compressor::create(const string &type)
 {
-  if (type == "snappy")
-    return new SnappyCompressor();
-
-  assert(0);
+  Compressor* cs_impl = NULL;
+  stringstream ss;
+  ceph::CompressionPluginRegistry::instance().factory(
+      type,
+      g_conf->compression_dir,
+      &cs_impl,
+      &ss);
+  assert(cs_impl != NULL);
+  return cs_impl;
 }
