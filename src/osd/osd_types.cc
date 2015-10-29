@@ -889,6 +889,7 @@ void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
   o.back()->name = "foo";
 }
 
+
 // -- pg_pool_t --
 
 void pg_pool_t::dump(Formatter *f) const
@@ -938,6 +939,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("cache_min_flush_age", cache_min_flush_age);
   f->dump_unsigned("cache_min_evict_age", cache_min_evict_age);
   f->dump_string("erasure_code_profile", erasure_code_profile);
+  f->dump_string("compression_type", compression_type);
   f->open_object_section("hit_set_params");
   hit_set_params.dump(f);
   f->close_section(); // hit_set_params
@@ -1312,6 +1314,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(fast_read, bl);
   ::encode(hit_set_grade_decay_rate, bl);
   ::encode(hit_set_search_last_n, bl);
+  ::encode(compression_type, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1452,9 +1455,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 23) {
     ::decode(hit_set_grade_decay_rate, bl);
     ::decode(hit_set_search_last_n, bl);
+    ::decode(compression_type, bl);
   } else {
     hit_set_grade_decay_rate = 0;
     hit_set_search_last_n = 1;
+    compression_type.clear();
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -1516,6 +1521,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.cache_min_flush_age = 231;
   a.cache_min_evict_age = 2321;
   a.erasure_code_profile = "profile in osdmap";
+  a.compression_type = "none";
   a.expected_num_objects = 123456;
   a.fast_read = false;
   o.push_back(new pg_pool_t(a));
@@ -1560,9 +1566,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.hit_set_params.get_type() != HitSet::TYPE_NONE) {
     out << " hit_set " << p.hit_set_params
 	<< " " << p.hit_set_period << "s"
-	<< " x" << p.hit_set_count << " decay_rate "
-	<< p.hit_set_grade_decay_rate
-	<< " search_last_n " << p.hit_set_search_last_n;
+	<< " x" << p.hit_set_count;
   }
   if (p.min_read_recency_for_promote)
     out << " min_read_recency_for_promote " << p.min_read_recency_for_promote;
