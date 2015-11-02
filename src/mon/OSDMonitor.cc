@@ -1025,9 +1025,6 @@ void OSDMonitor::maybe_prime_pg_temp()
 void OSDMonitor::prime_pg_temp(OSDMap& next,
 			       ceph::unordered_map<pg_t, pg_stat_t>::iterator pp)
 {
-  // do not prime creating pgs
-  if (pp->second.state & PG_STATE_CREATING)
-    return;
   // do not touch a mapping if a change is pending
   if (pending_inc.new_pg_temp.count(pp->first))
     return;
@@ -1674,9 +1671,9 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   }
 
   dout(10) << " osd." << target_osd << " has "
-	   << fi.reporters.size() << " reporters, "
-	   << grace << " grace (" << orig_grace << " + " << my_grace
-	   << " + " << peer_grace << "), max_failed_since " << max_failed_since
+	   << fi.reporters.size() << " reporters and "
+	   << fi.num_reports << " reports, "
+	   << grace << " grace (" << orig_grace << " + " << my_grace << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
 
   // already pending failure?
@@ -1687,13 +1684,13 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   }
 
   if (failed_for >= grace &&
-      ((int)fi.reporters.size() >= g_conf->mon_osd_min_down_reporters)) {
-    dout(1) << " we have enough reporters to mark osd." << target_osd
-	    << " down" << dendl;
+      ((int)fi.reporters.size() >= g_conf->mon_osd_min_down_reporters) &&
+      (fi.num_reports >= g_conf->mon_osd_min_down_reports)) {
+    dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
     mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
-		     << (int)fi.reporters.size() << " reporters after "
+		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
 		     << failed_for << " >= grace " << grace << ")\n";
     return true;
   }
@@ -1704,8 +1701,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
-  dout(1) << "prepare_failure " << m->get_target()
-	  << " from " << m->get_orig_source_inst()
+  dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
 
   int target_osd = m->get_target().name.num();
@@ -1715,9 +1711,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 
   // calculate failure time
   utime_t now = ceph_clock_now(g_ceph_context);
-  utime_t failed_since =
-    m->get_recv_stamp() -
-    utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
+  utime_t failed_since = m->get_recv_stamp() - utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
 
   if (m->if_osd_failed()) {
     // add a report
@@ -1733,7 +1727,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
   } else {
     // remove the report
     mon->clog->debug() << m->get_target() << " failure report canceled by "
-		       << m->get_orig_source_inst() << "\n";
+		      << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
       list<MonOpRequestRef> ls;
@@ -1745,12 +1739,12 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 	ls.pop_front();
       }
       if (fi.reporters.empty()) {
-	dout(10) << " removing last failure_info for osd." << target_osd
-		 << dendl;
+	dout(10) << " removing last failure_info for osd." << target_osd << dendl;
 	failure_info.erase(target_osd);
       } else {
 	dout(10) << " failure_info for osd." << target_osd << " now "
-		 << fi.reporters.size() << " reporters" << dendl;
+		 << fi.reporters.size() << " reporters and "
+		 << fi.num_reports << " reports" << dendl;
       }
     } else {
       dout(10) << " no failure_info for osd." << target_osd << dendl;
@@ -2408,20 +2402,7 @@ void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
 
   MonSession *s = op->get_session();
   assert(s);
-
-  if (s->proxy_con &&
-      s->proxy_con->has_feature(CEPH_FEATURE_MON_ROUTE_OSDMAP)) {
-    // oh, we can tell the other mon to do it
-    dout(10) << __func__ << " asking proxying mon to send_incremental from "
-	     << first << dendl;
-    MRoute *r = new MRoute(s->proxy_tid, NULL);
-    r->send_osdmap_first = first;
-    s->proxy_con->send_message(r);
-    op->mark_event("reply: send routed send_osdmap_first reply");
-  } else {
-    // do it ourselves
-    send_incremental(first, s, false, op);
-  }
+  send_incremental(first, s, false, op);
 }
 
 void OSDMonitor::send_incremental(epoch_t first,
@@ -2449,7 +2430,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 	     << first << " " << bl.length() << " bytes" << dendl;
 
     MOSDMap *m = new MOSDMap(osdmap.get_fsid());
-    m->oldest_map = get_first_committed();
+    m->oldest_map = first;
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
 
@@ -2907,7 +2888,7 @@ namespace {
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
     MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
-    HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N};
+    HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N, COMPRESSION_TYPE};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3360,7 +3341,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
     typedef std::map<std::string, osd_pool_get_choices> choices_map_t;
     const choices_map_t ALL_CHOICES = boost::assign::map_list_of
-      ("compression_type", COMPRESSION_TYPE)
       ("size", SIZE)
       ("min_size", MIN_SIZE)
       ("crash_replay_interval", CRASH_REPLAY_INTERVAL)
@@ -3384,7 +3364,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
       ("fast_read", FAST_READ)
       ("hit_set_grade_decay_rate", HIT_SET_GRADE_DECAY_RATE)
-      ("hit_set_search_last_n", HIT_SET_SEARCH_LAST_N);
+      ("hit_set_search_last_n", HIT_SET_SEARCH_LAST_N)
+      ("compression_type", COMPRESSION_TYPE);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3541,9 +3522,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CACHE_MIN_EVICT_AGE:
 	    f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
 	    break;
-    case COMPRESSION_TYPE:
-      f->dump_string("compression_type", p->compression_type);
-      break;
+	  case COMPRESSION_TYPE:
+	    f->dump_string("compression_type", p->compression_type);
+	    break;
 	  case ERASURE_CODE_PROFILE:
 	    f->dump_string("erasure_code_profile", p->erasure_code_profile);
 	    break;
@@ -3558,14 +3539,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case FAST_READ:
             f->dump_int("fast_read", p->fast_read);
             break;
-	  case HIT_SET_GRADE_DECAY_RATE:
-	    f->dump_int("hit_set_grade_decay_rate",
-			p->hit_set_grade_decay_rate);
-	    break;
-	  case HIT_SET_SEARCH_LAST_N:
-	    f->dump_int("hit_set_search_last_n",
-			p->hit_set_search_last_n);
-	    break;
 	}
 	f->close_section();
 	f->flush(rdata);
@@ -3649,9 +3622,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CACHE_MIN_EVICT_AGE:
 	    ss << "cache_min_evict_age: " << p->cache_min_evict_age << "\n";
 	    break;
-    case COMPRESSION_TYPE:
-      ss << "compression_type: " << p->compression_type << "\n";
-      break;
+	  case COMPRESSION_TYPE:
+	    ss << "compression_type: " << p->compression_type << "\n";
+	    break;
 	  case ERASURE_CODE_PROFILE:
 	    ss << "erasure_code_profile: " << p->erasure_code_profile << "\n";
 	    break;
@@ -4543,7 +4516,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 				 const string &crush_ruleset_name,
                                  unsigned pg_num, unsigned pgp_num,
 				 const string &erasure_code_profile,
-         const string &compression_type,
+				 const string &compression_type,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
                                  FastReadType fast_read,
@@ -4803,8 +4776,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        var == "target_max_objects" || var == "target_max_bytes" ||
        var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
        var == "cache_target_dirty_high_ratio" ||
-       var == "cache_min_flush_age" || var == "cache_min_evict_age" ||
-       var == "hit_set_grade_decay_rate" || var == "hit_set_search_last_n")) {
+       var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
+    ss << "pool '" << poolstr << "' is not a tier pool: variable not applicable";
     return -EACCES;
   }
 
@@ -5006,6 +4979,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.hit_set_period = n;
   } else if (var == "hit_set_count") {
+
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -5097,26 +5071,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_read_recency_for_promote = n;
-  } else if (var == "hit_set_grade_decay_rate") {
-    if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
-      return -EINVAL;
-    }
-    if (n > 100 || n < 0) {
-      ss << "value out of range,valid range is 0 - 100";
-      return -EINVAL;
-    }
-    p.hit_set_grade_decay_rate = n;
-  } else if (var == "hit_set_search_last_n") {
-    if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
-      return -EINVAL;
-    }
-    if (n > p.hit_set_count || n < 0) {
-      ss << "value out of range,valid range is 0 - hit_set_count";
-      return -EINVAL;
-    }
-    p.hit_set_search_last_n = n;
   } else if (var == "min_write_recency_for_promote") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -7279,8 +7233,6 @@ done:
     ntp->hit_set_period = g_conf->osd_tier_default_cache_hit_set_period;
     ntp->min_read_recency_for_promote = g_conf->osd_tier_default_cache_min_read_recency_for_promote;
     ntp->min_write_recency_for_promote = g_conf->osd_tier_default_cache_min_write_recency_for_promote;
-    ntp->hit_set_grade_decay_rate = g_conf->osd_tier_default_cache_hit_set_grade_decay_rate;
-    ntp->hit_set_search_last_n = g_conf->osd_tier_default_cache_hit_set_search_last_n;
     ntp->hit_set_params = hsp;
     ntp->target_max_bytes = size;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";
