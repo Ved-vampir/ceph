@@ -22,12 +22,17 @@ if [ -e CMakeCache.txt ]; then
   done
   [ -z "$EC_PATH" ] && EC_PATH=./ec_plugins
   # check for compression plugins
-  mkdir -p cs_plugins
+  mkdir -p .libs/compressor
   for file in ./src/compressor/*/libcs_*.so*;
   do
-    ln -sf ../${file} cs_plugins/`basename $file`
+    ln -sf ../${file} .libs/compressor/`basename $file`
   done
-  [ -z "$CS_PATH" ] && CS_PATH=./cs_plugins
+else
+    mkdir -p .libs/compressor
+    for f in `ls -d compressor/*/`; 
+    do 
+        cp .libs/libceph_`basename $f`.so* .libs/compressor/;
+    done
 fi
 
 if [ -z "$CEPH_BUILD_ROOT" ]; then
@@ -422,7 +427,7 @@ if [ "$start_mon" -eq 1 ]; then
         mon data avail warn = 10
         mon data avail crit = 1
         erasure code dir = $EC_PATH
-        compression dir = $CS_PATH
+        plugin dir = $CS_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
         rgw dns name = localhost
