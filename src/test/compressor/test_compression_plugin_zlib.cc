@@ -19,19 +19,14 @@
 #include <signal.h>
 #include <gtest/gtest.h>
 #include "global/global_init.h"
-#include "compressor/CompressionPlugin.h"
+#include "compressor/Compressor.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 
 TEST(CompressionPluginZlib, all)
 {
-  CompressorRef compressor;
-  CompressionPluginRegistry &instance = CompressionPluginRegistry::instance();
-  EXPECT_FALSE(compressor);
-  EXPECT_EQ(0, instance.factory("zlib",
-        g_conf->compression_dir,
-        &compressor, &cerr));
+  CompressorRef compressor = Compressor::create(g_ceph_context, "zlib");
   EXPECT_TRUE(compressor.get());
 }
 
@@ -42,7 +37,7 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  g_conf->set_val("compression_dir", ".libs", false, false);
+  g_conf->set_val("plugin_dir", ".libs", false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
