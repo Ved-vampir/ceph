@@ -27,9 +27,8 @@ class Compressor {
   virtual ~Compressor() {}
   virtual int compress(bufferlist &in, bufferlist &out) = 0;
   virtual int decompress(bufferlist &in, bufferlist &out) = 0;
-  virtual const char* get_method_name() = 0;
 
-  static CompressorRef create(const string &compression_dir, const string &type);
+  static CompressorRef create(CephContext *cct, const string &type);
 };
 
 

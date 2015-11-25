@@ -16,15 +16,18 @@
 #include "CompressionPlugin.h"
 
 
-CompressorRef Compressor::create(const string &compression_dir, const string &type)
+CompressorRef Compressor::create(CephContext *cct, const string &type)
 {
   CompressorRef cs_impl = NULL;
   stringstream ss;
-  ceph::CompressionPluginRegistry::instance().factory(
-      type,
-      compression_dir,
-      &cs_impl,
-      &ss);
-  assert(cs_impl != NULL);
+  PluginRegistry *reg = cct->get_plugin_registry();
+  CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", type));
+  if (factory == NULL) {
+    lderr(cct) << __func__ << " cannot load compressor of type " << type << dendl;
+    return NULL;
+  }
+  int err = factory->factory(&cs_impl, &ss);
+  if (err)
+    lderr(cct) << __func__ << " factory return error " << err << dendl;
   return cs_impl;
 }

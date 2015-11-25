@@ -19,63 +19,27 @@
 #define COMPRESSION_PLUGIN_H
 
 #include "common/Mutex.h"
+#include "common/PluginRegistry.h"
 #include "Compressor.h"
-
-extern "C" {
-  const char *__compression_version();
-  int __compression_init(char *plugin_name, char *directory);
-}
 
 namespace ceph {
 
-  class CompressionPlugin {
+  class CompressionPlugin :  public Plugin {
   public:
-    void *library;
     CompressorRef compressor;
 
-    CompressionPlugin() :
-      library(0), compressor(0) {}
+    CompressionPlugin(CephContext *cct) : Plugin(cct),
+                                          compressor(0) 
+    {}
+    
     virtual ~CompressionPlugin() {}
 
-    virtual int factory(const std::string &directory,
-                        CompressorRef *cs,
+    virtual int factory(CompressorRef *cs,
 			                  ostream *ss) = 0;
+
+    virtual const char* name() {return "CompressionPlugin";}
   };
 
-  class CompressionPluginRegistry {
-  public:
-    Mutex lock;
-    bool loading;
-    bool disable_dlclose;
-    std::map<std::string,CompressionPlugin*> plugins;
-
-    static CompressionPluginRegistry singleton;
-
-    CompressionPluginRegistry();
-    ~CompressionPluginRegistry();
-
-    static CompressionPluginRegistry &instance() {
-      return singleton;
-    }
-
-    int factory(const std::string &plugin,
-		            const std::string &directory,
-		            CompressorRef *cs,
-		            ostream *ss);
-
-    int add(const std::string &name, CompressionPlugin *plugin);
-    int remove(const std::string &name);
-    CompressionPlugin *get(const std::string &name);
-
-    int load(const std::string &plugin_name,
-	     const std::string &directory,
-	     CompressionPlugin **plugin,
-	     ostream *ss);
-
-    int preload(const std::string &plugins,
-		const std::string &directory,
-		ostream *ss);
-  };
 }
 
 #endif
