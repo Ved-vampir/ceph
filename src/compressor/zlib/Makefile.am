@@ -9,13 +9,13 @@ zlib_sources = \
 
 compressor/zlib/CompressionPluginZlib.cc: ./ceph_ver.h
 
-libcs_zlib_la_SOURCES = ${zlib_sources}
-libcs_zlib_la_CFLAGS = ${AM_CFLAGS}  
-libcs_zlib_la_CXXFLAGS= ${AM_CXXFLAGS} 
-libcs_zlib_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libcs_zlib_la_LDFLAGS = ${AM_LDFLAGS} -lz -version-info 2:0:0
+libceph_zlib_la_SOURCES = ${zlib_sources}
+libceph_zlib_la_CFLAGS = ${AM_CFLAGS}  
+libceph_zlib_la_CXXFLAGS= ${AM_CXXFLAGS} 
+libceph_zlib_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_zlib_la_LDFLAGS = ${AM_LDFLAGS} -lz -version-info 2:0:0
 if LINUX
-libcs_zlib_la_LDFLAGS += -export-symbols-regex '.*__compressor_.*'
+libceph_zlib_la_LDFLAGS += -export-symbols-regex '.*__compressor_.*'
 endif
 
-compressorlib_LTLIBRARIES += libcs_zlib.la
+compressorlib_LTLIBRARIES += libceph_zlib.la

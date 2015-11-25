@@ -17,36 +17,43 @@
 #include "ceph_ver.h"
 #include "compressor/CompressionPlugin.h"
 #include "CompressionZlib.h"
+#include "common/debug.h"
+
+#define dout_subsys ceph_subsys_mon
 // -----------------------------------------------------------------------------
 
 class CompressionPluginZlib : public CompressionPlugin {
 public:
 
-  virtual int factory(const std::string &directory,
-                      CompressorRef *cs,
+  CompressionPluginZlib(CephContext *cct) : CompressionPlugin(cct)
+  {}
+
+  virtual int factory(CompressorRef *cs,
                       ostream *ss)
   {
     if (compressor == 0) {
       CompressionZlib *interface = new CompressionZlib();
-      *cs = CompressorRef(interface);
-    } else
-      cs = &compressor;
+      compressor = CompressorRef(interface);
+    }
+    *cs = compressor;
     return 0;
   }
 };
 
 // -----------------------------------------------------------------------------
 
-const char *__compression_version()
+const char *__ceph_plugin_version()
 {
   return CEPH_GIT_NICE_VER;
 }
 
 // -----------------------------------------------------------------------------
 
-int __compression_init(char *plugin_name, char *directory)
+int __ceph_plugin_init(CephContext *cct,
+                       const std::string& type,
+                       const std::string& name)
 {
-  CompressionPluginRegistry &instance = CompressionPluginRegistry::instance();
+  PluginRegistry *instance = cct->get_plugin_registry();
 
-  return instance.add(plugin_name, new CompressionPluginZlib());
+  return instance->add(type, name, new CompressionPluginZlib(cct));
 }
