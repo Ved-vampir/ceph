@@ -24,27 +24,25 @@
 #include "global/global_context.h"
 #include "common/config.h"
 
-TEST(CompressionPluginRegistry, all)
+TEST(CompressionPlugin, all)
 {
   string directory(".libs");
   CompressorRef compressor;
-  CompressionPluginRegistry &instance = CompressionPluginRegistry::instance();
-  EXPECT_FALSE(compressor);
-  EXPECT_EQ(-EIO, instance.factory("invalid",
-				   g_conf->compression_dir,
-				   &compressor, &cerr));
-  EXPECT_FALSE(compressor);
-  EXPECT_EQ(0, instance.factory("example",
-				g_conf->compression_dir,
-				&compressor, &cerr));
+  PluginRegistry *reg = g_ceph_context->get_plugin_registry();
+  EXPECT_TRUE(reg);
+  CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get("compressor", "invalid"));
+  EXPECT_FALSE(factory);
+  factory = dynamic_cast<CompressionPlugin*>(reg->get("compressor", "example"));
+  EXPECT_TRUE(factory);
+  stringstream ss;
+  EXPECT_EQ(0, factory->factory(&compressor, &ss));
   EXPECT_TRUE(compressor.get());
-  CompressionPlugin *plugin = 0;
   {
-    Mutex::Locker l(instance.lock);
-    EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, &cerr));
-    EXPECT_EQ(-ENOENT, instance.remove("does not exist"));
-    EXPECT_EQ(0, instance.remove("example"));
-    EXPECT_EQ(0, instance.load("example", directory, &plugin, &cerr));
+    Mutex::Locker l(reg->lock);
+    EXPECT_EQ(-EEXIST, reg->load("compressor", "example"));
+    EXPECT_EQ(-ENOENT, reg->remove("compressor", "does not exist"));
+    EXPECT_EQ(0, reg->remove("compressor", "example"));
+    EXPECT_EQ(0, reg->load("compressor", "example"));
   }
 }
 
@@ -55,7 +53,7 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  g_conf->set_val("compression_dir", ".libs", false, false);
+  g_conf->set_val("plugin_dir", ".libs", false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

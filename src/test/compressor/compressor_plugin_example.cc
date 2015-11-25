@@ -23,19 +23,36 @@
 
 class CompressorPluginExample : public CompressionPlugin {
 public:
-  virtual int factory(const std::string &directory,
-                      CompressorRef *compressor,
+
+  CompressorPluginExample(CephContext* cct) : CompressionPlugin(cct)
+  {}
+
+  virtual int factory(CompressorRef *cs,
 		      ostream *ss)
   {
-    *compressor = CompressorRef(new CompressorExample());
+    if (compressor == 0) {
+      CompressorExample *interface = new CompressorExample();
+      compressor = CompressorRef(interface);
+    }
+    cs = &compressor;
     return 0;
   }
 };
 
-const char *__compression_version() { return CEPH_GIT_NICE_VER; }
+// -----------------------------------------------------------------------------
 
-int __compression_init(char *plugin_name, char *directory)
+const char *__ceph_plugin_version()
 {
-  CompressionPluginRegistry &instance = CompressionPluginRegistry::instance();
-  return instance.add(plugin_name, new CompressorPluginExample());
+  return CEPH_GIT_NICE_VER;
+}
+
+// -----------------------------------------------------------------------------
+
+int __ceph_plugin_init(CephContext *cct,
+                       const std::string& type,
+                       const std::string& name)
+{
+  PluginRegistry *instance = cct->get_plugin_registry();
+
+  return instance->add(type, name, new CompressorPluginExample(cct));
 }
