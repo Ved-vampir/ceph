@@ -68,5 +68,31 @@ unittest_compression_plugin_zlib_LDADD += -ldl
 endif
 check_TESTPROGRAMS += unittest_compression_plugin_zlib
 
+unittest_compression_isal_SOURCES = \
+    test/compressor/test_compression_isal.cc \
+    ${isal_sources}
+unittest_compression_isal_CFLAGS = $(AM_CFLAGS) \
+    -Icompressor/isal/isa-l/include/
+unittest_compression_isal_CXXFLAGS = $(UNITTEST_CXXFLAGS) \
+    -Icompressor/isal/isa-l/include/
+unittest_compression_isal_CCASFLAGS = ${AM_CCASFLAGS} \
+    -I$(srcdir)/compressor/isal/isa-l/include/
+unittest_compression_isal_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_compression_isal_LDFLAGS = -lz
+if LINUX
+unittest_compression_isal_LDADD += -ldl
+endif
+check_TESTPROGRAMS += unittest_compression_isal
+
+unittest_compression_plugin_isal_SOURCES = \
+    test/compressor/test_compression_plugin_isal.cc
+unittest_compression_plugin_isal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_compression_plugin_isal_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR)
+unittest_compression_plugin_isal_LDFLAGS = -lz
+if LINUX
+unittest_compression_plugin_isal_LDADD += -ldl
+endif
+check_TESTPROGRAMS += unittest_compression_plugin_isal
+
 endif # WITH_OSD
 endif # ENABLE_SERVER
