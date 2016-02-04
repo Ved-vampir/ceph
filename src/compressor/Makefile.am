@@ -3,6 +3,7 @@ compressorlib_LTLIBRARIES =
 
 include compressor/zlib/Makefile.am
 include compressor/snappy/Makefile.am
+include compressor/isal/Makefile.am
 
 libcompressor_la_SOURCES = \
 	compressor/Compressor.cc \
