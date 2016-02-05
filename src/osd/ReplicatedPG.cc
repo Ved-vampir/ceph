@@ -2147,7 +2147,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       return cache_result_t::BLOCKED_FULL;
     }
 
-    if (!hit_set) {
+    if (!hit_set && (must_promote || !op->need_skip_promote()) ) {
       promote_object(obc, missing_oid, oloc, op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     } else if (op->may_write() || op->may_cache()) {
@@ -2160,11 +2160,12 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       }
 
       // Promote too?
-      if (!op->need_skip_promote()) {
-        maybe_promote(obc, missing_oid, oloc, in_hit_set,
+      if (!op->need_skip_promote() && 
+          maybe_promote(obc, missing_oid, oloc, in_hit_set,
 	              pool.info.min_write_recency_for_promote,
 		      OpRequestRef(),
-		      promote_obc);
+		      promote_obc)) {
+	return cache_result_t::BLOCKED_PROMOTE;
       }
       return cache_result_t::HANDLED_PROXY;
     } else {
@@ -2274,7 +2275,7 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
 				 ObjectContextRef *promote_obc)
 {
   dout(20) << __func__ << " missing_oid " << missing_oid
-	   << "  in_hit_set " << in_hit_set << dendl;
+	   << "  in_hit_set " << in_hit_set << " recency "<<recency<<dendl;
 
   switch (recency) {
   case 0:
@@ -11771,8 +11772,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
     // is this object old and/or cold enough?
     int temp = 0;
     uint64_t temp_upper = 0, temp_lower = 0;
-    if (hit_set)
-      agent_estimate_temp(soid, &temp);
+    agent_estimate_temp(soid, &temp);
     agent_state->temp_hist.add(temp);
     agent_state->temp_hist.get_position_micro(temp, &temp_lower, &temp_upper);
 
@@ -12078,7 +12078,8 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
 
 void ReplicatedPG::agent_estimate_temp(const hobject_t& oid, int *temp)
 {
-  assert(hit_set);
+  if (!hit_set)
+    return;
   assert(temp);
   *temp = 0;
   if (hit_set->contains(oid))
